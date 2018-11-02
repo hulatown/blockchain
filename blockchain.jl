@@ -1,3 +1,5 @@
+using SHA, JSON
+
 struct Transaction
     sender::String
     recipient::String
@@ -8,10 +10,9 @@ mutable struct Block
     index::Int64
     timestamp::Int64
     transaction_list::Array{Transaction}
-    proof::String
+    proof::Int64
     previous_hash::String
 end
-
 
 mutable struct Blockchain
     chain::Array{Block}
@@ -20,19 +21,25 @@ end
 
 function init(blockchain::Blockchain)
     blockchain.chain = []
-    blockchain.current_transaciton = []
+    blockchain.current_transaction = []
+    new_block(block, proof=100, "genesis_block_hash")
 end
 
-function new_block(;blockchain::Blockchain, proof, previous_hash = nothing)
+function new_block(;blockchain::Blockchain, proof::Int64, previous_hash = nothing)
+    if previous_hash == nothing
+        previous_hash = blockhash(blockchain.chain[end])
+    end
+    block = Block(length+1, round(Int64, time()), blockchain.current_transaction, proof, previous_hash)
+
+    push!(blockchain.block, block)
+    blockchain.current_transaction = []
 end
 
 function new_transaction(;blockchain::Blockchain, sender, recipient, amount)
     new_tx = Transaction(sender, recipient, amount)
-    push!(blockchain.chain, new_tx)
+    push!(blockchain.current_transaction, new_tx)
 end
 
-function blockhash()
-end
-
-function last_block()
+function blockhash(block::Block)
+    return bytes2hex(sha256(JSON.json(block)))
 end
