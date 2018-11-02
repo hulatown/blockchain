@@ -1,5 +1,7 @@
 using SHA, JSON
 
+difficulty = Int8(4)
+
 struct Transaction
     sender::String
     recipient::String
@@ -42,4 +44,19 @@ end
 
 function blockhash(block::Block)
     return bytes2hex(sha256(JSON.json(block)))
+end
+
+function proof_of_work(last_proof)
+    proof = 0
+    while valid_proof(last_proof, proof) == false
+        global proof += 1
+    end
+    return proof
+end
+
+function valid_proof(last_proof, proof)
+    header = "0"^difficulty
+    guess = string(last_proof) * string(proof)
+    guess_hash = bytes2hex(sha256(guess))
+    return guess_hash[1:difficulty] == header
 end
