@@ -1,4 +1,7 @@
 using SHA, JSON
+using Restful, Logging
+
+import Restful: json
 
 difficulty = Int8(4)
 
@@ -59,4 +62,22 @@ function valid_proof(last_proof, proof)
     guess = string(last_proof) * string(proof)
     guess_hash = bytes2hex(sha256(guess))
     return guess_hash[1:difficulty] == header
+end
+
+const app = Restful.app()
+
+app.get("/mine") do req, res, route
+    res.text("TODO mine")
+end
+
+app.post("/transactions/new", json) do req, res, route
+    res.text("TODO add a new transaction")
+end
+
+app.get("/chain") do req, res, route
+    res.text("TODO return chain info")
+end
+
+@async with_logger(SimpleLogger(stderr, Logging.Warn)) do
+    app.listen("127.0.0.1", 3001)
 end
