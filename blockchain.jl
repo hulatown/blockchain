@@ -1,5 +1,6 @@
 using SHA, JSON
 using Restful, Logging
+using UUIDs
 
 import Restful: json
 
@@ -27,22 +28,24 @@ end
 function init(blockchain::Blockchain)
     blockchain.chain = []
     blockchain.current_transaction = []
-    new_block(block, proof=100, "genesis_block_hash")
+    new_block(blockchain=blockchain, proof=100, previous_hash="genesis_block_hash")
 end
 
 function new_block(;blockchain::Blockchain, proof::Int64, previous_hash = nothing)
     if previous_hash == nothing
         previous_hash = blockhash(blockchain.chain[end])
     end
-    block = Block(length+1, round(Int64, time()), blockchain.current_transaction, proof, previous_hash)
+    block = Block(length(blockchain.chain)+1, round(Int64, time()), blockchain.current_transaction, proof, previous_hash)
 
-    push!(blockchain.block, block)
+    push!(blockchain.chain, block)
     blockchain.current_transaction = []
+    return block
 end
 
-function new_transaction(;blockchain::Blockchain, sender, recipient, amount)
+function new_transaction(;blockchain::Blockchain, sender::String, recipient::String, amount::Float64)
     new_tx = Transaction(sender, recipient, amount)
     push!(blockchain.current_transaction, new_tx)
+    return length(blockchain.chain) + 1
 end
 
 function blockhash(block::Block)
@@ -52,7 +55,7 @@ end
 function proof_of_work(last_proof)
     proof = 0
     while valid_proof(last_proof, proof) == false
-        global proof += 1
+        proof += 1
     end
     return proof
 end
@@ -65,17 +68,40 @@ function valid_proof(last_proof, proof)
 end
 
 const app = Restful.app()
+blockchain = Blockchain([], [])
+node_identifier = replace(string(uuid4()), "-" => "")
+init(blockchain)
 
-app.get("/mine") do req, res, route
-    res.text("TODO mine")
+app.get("/mine", json) do req, res, route
+    last_block = blockchain.chain[end]
+    last_proof = last_block.proof
+    proof = proof_of_work(last_proof)
+
+    new_transaction(blockchain=blockchain, sender="0", recipient=node_identifier, amount=1.0)
+
+    previous_hash = blockhash(last_block)
+    block = new_block(blockchain=blockchain, proof=proof, previous_hash=previous_hash)
+    res.json(Dict("message" => "New Block Forged",
+    "index" => block.index,
+    "transaction" => block.transaction_list,
+    "proof" => block.proof,
+    "previous_hash" => block.previous_hash) |> collect)
 end
 
 app.post("/transactions/new", json) do req, res, route
-    res.text("TODO add a new transaction")
+    required = ["sender", "recipient", "amount"]
+    data = JSON.parse(req.body)
+
+    if all(i->(i in keys(data)), required) == false
+        res.code(400)
+    else
+        block_id = new_transaction(blockchain=blockchain, sender=data["sender"], recipient=data["recipient"], amount=data["amount"])
+        res.json(Dict("message" => "Transaction will be added to Block " * string(block_id)) |> collect)
+    end
 end
 
-app.get("/chain") do req, res, route
-    res.text("TODO return chain info")
+app.get("/chain", json) do req, res, route
+    res.json(Dict("chain"=>blockchain.chain, "length"=>length(blockchain.chain)) |> collect)
 end
 
 @async with_logger(SimpleLogger(stderr, Logging.Warn)) do
