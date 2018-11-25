@@ -125,68 +125,66 @@ end
 
 const app = Restful.app()
 
-function main(args)
-    blockchain = Blockchain([], [], [])
-    node_identifier = replace(string(uuid4()), "-" => "")
-    init(blockchain)
+blockchain = Blockchain([], [], [])
+node_identifier = replace(string(uuid4()), "-" => "")
+init(blockchain)
 
-    app.get("/mine", json) do req, res, route
-        last_block = blockchain.chain[end]
-        last_proof = last_block.proof
-        proof = proof_of_work(last_proof)
+app.get("/mine", json) do req, res, route
+    last_block = blockchain.chain[end]
+    last_proof = last_block.proof
+    proof = proof_of_work(last_proof)
 
-        new_transaction(blockchain=blockchain, sender="0", recipient=node_identifier, amount=1.0)
+    new_transaction(blockchain=blockchain, sender="0", recipient=node_identifier, amount=1.0)
 
-        previous_hash = blockhash(last_block)
-        block = new_block(blockchain=blockchain, proof=proof, previous_hash=previous_hash)
-        res.json(Dict("message" => "New Block Forged",
-        "index" => block.index,
-        "transaction" => block.transaction_list,
-        "proof" => block.proof,
-        "previous_hash" => block.previous_hash) |> collect)
+    previous_hash = blockhash(last_block)
+    block = new_block(blockchain=blockchain, proof=proof, previous_hash=previous_hash)
+    res.json(Dict("message" => "New Block Forged",
+    "index" => block.index,
+    "transaction" => block.transaction_list,
+    "proof" => block.proof,
+    "previous_hash" => block.previous_hash) |> collect)
+end
+
+app.post("/transactions/new", json) do req, res, route
+    required = ["sender", "recipient", "amount"]
+    data = JSON.parse(req.body)
+
+    if all(i->(i in keys(data)), required) == false
+        res.code(400)
+    else
+        block_id = new_transaction(blockchain=blockchain, sender=data["sender"], recipient=data["recipient"], amount=data["amount"])
+        res.json(Dict("message" => "Transaction will be added to Block " * string(block_id)) |> collect)
+    end
+end
+
+app.get("/chain", json) do req, res, route
+    res.json(Dict("chain"=>blockchain.chain, "length"=>length(blockchain.chain)) |> collect)
+end
+
+app.post("/nodes/register", json) do req, res, route
+    data = JSON.parse(req.body)
+    nodes = data["nodes"]
+
+    if nodes == nothing
+        res.code(400)
     end
 
-    app.post("/transactions/new", json) do req, res, route
-        required = ["sender", "recipient", "amount"]
-        data = JSON.parse(req.body)
-
-        if all(i->(i in keys(data)), required) == false
-            res.code(400)
-        else
-            block_id = new_transaction(blockchain=blockchain, sender=data["sender"], recipient=data["recipient"], amount=data["amount"])
-            res.json(Dict("message" => "Transaction will be added to Block " * string(block_id)) |> collect)
-        end
+    for node in nodes
+        register_node(blockchain, node)
     end
 
-    app.get("/chain", json) do req, res, route
-        res.json(Dict("chain"=>blockchain.chain, "length"=>length(blockchain.chain)) |> collect)
+    res.json(Dict("message" => "Nodes will be added to Blockchain") |> collect)
+end
+
+app.get("/nodes/resolve", json) do req, res, route
+    replaced = blockchain.resolve_conflict()
+    if replaced == true
+        res.json(Dict("message" => "Our chain was replaced") |> collect)
+    else
+        res.json(Dict("message" => "Our chain is main chain") |> collect)
     end
+end
 
-    app.post("/nodes/register", json) do req, res, route
-        data = JSON.parse(req.body)
-        nodes = data["nodes"]
-
-        if nodes == nothing
-            res.code(400)
-        end
-
-        for node in nodes
-            register_node(blockchain, node)
-        end
-
-        res.json(Dict("message" => "Nodes will be added to Blockchain") |> collect)
-    end
-
-    app.get("/nodes/resolve", json) do req, res, route
-        replaced = blockchain.resolve_conflict()
-        if replaced == true
-            res.json(Dict("message" => "Our chain was replaced") |> collect)
-        else
-            res.json(Dict("message" => "Our chain is main chain") |> collect)
-        end
-    end
-
-    @async with_logger(SimpleLogger(stderr, Logging.Warn)) do
-        app.listen("127.0.0.1", args[1])
-    end
+@async with_logger(SimpleLogger(stderr, Logging.Warn)) do
+    app.listen("127.0.0.1", 3001)
 end
