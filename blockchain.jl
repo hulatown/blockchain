@@ -177,7 +177,7 @@ app.post("/nodes/register", json) do req, res, route
 end
 
 app.get("/nodes/resolve", json) do req, res, route
-    replaced = blockchain.resolve_conflict()
+    replaced = resolve_conflict(blockchain)
     if replaced == true
         res.json(Dict("message" => "Our chain was replaced") |> collect)
     else
